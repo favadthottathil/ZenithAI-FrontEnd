@@ -5,7 +5,7 @@ abstract class ChatEvent extends Equatable {
   const ChatEvent();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
 class ChatMessageSent extends ChatEvent {
@@ -13,37 +13,180 @@ class ChatMessageSent extends ChatEvent {
   const ChatMessageSent(this.text);
 
   @override
-  List<Object> get props => [text];
+  List<Object?> get props => [text];
 }
 
-abstract class ChatState extends Equatable {
-  final List<ChatMessage> messages;
-  const ChatState(this.messages);
+// Zero-setState BLoC events for UI actions
+class UpdateActiveModel extends ChatEvent {
+  final String model;
+  const UpdateActiveModel(this.model);
 
   @override
-  List<Object> get props => [messages];
+  List<Object?> get props => [model];
+}
+
+class ToggleSpeechListening extends ChatEvent {
+  const ToggleSpeechListening();
+}
+
+class SetSpeechListening extends ChatEvent {
+  final bool isListening;
+  const SetSpeechListening(this.isListening);
+
+  @override
+  List<Object?> get props => [isListening];
+}
+
+class UpdateInputText extends ChatEvent {
+  final String text;
+  const UpdateInputText(this.text);
+
+  @override
+  List<Object?> get props => [text];
+}
+
+class ToggleMessageLike extends ChatEvent {
+  final int index;
+  const ToggleMessageLike(this.index);
+
+  @override
+  List<Object?> get props => [index];
+}
+
+class ToggleMessageDislike extends ChatEvent {
+  final int index;
+  const ToggleMessageDislike(this.index);
+
+  @override
+  List<Object?> get props => [index];
+}
+
+class ToggleMessageSpeaking extends ChatEvent {
+  final int index;
+  const ToggleMessageSpeaking(this.index);
+
+  @override
+  List<Object?> get props => [index];
+}
+
+
+// Redesigned ChatState to hold all state variables
+abstract class ChatState extends Equatable {
+  final List<ChatMessage> messages;
+  final String activeModel;
+  final bool isListening;
+  final String inputText;
+  final String? conversationId;
+  final List<Map<String, dynamic>> conversations;
+
+  const ChatState(
+    this.messages, {
+    this.activeModel = "ChatGPT 4o",
+    this.isListening = false,
+    this.inputText = "",
+    this.conversationId,
+    this.conversations = const [],
+  });
+
+  @override
+  List<Object?> get props => [
+        messages,
+        activeModel,
+        isListening,
+        inputText,
+        conversationId,
+        conversations,
+      ];
 }
 
 class ChatInitial extends ChatState {
-  const ChatInitial() : super(const []);
+  const ChatInitial({
+    super.activeModel,
+    super.isListening,
+    super.inputText,
+    super.conversationId,
+    super.conversations,
+  }) : super(const []);
 }
 
 class ChatLoading extends ChatState {
-  const ChatLoading(super.messages);
+  const ChatLoading(
+    super.messages, {
+    super.activeModel,
+    super.isListening,
+    super.inputText,
+    super.conversationId,
+    super.conversations,
+  });
 }
 
 class ChatStreaming extends ChatState {
-  const ChatStreaming(super.messages);
+  const ChatStreaming(
+    super.messages, {
+    super.activeModel,
+    super.isListening,
+    super.inputText,
+    super.conversationId,
+    super.conversations,
+  });
 }
 
 class ChatSuccess extends ChatState {
-  const ChatSuccess(super.messages);
+  const ChatSuccess(
+    super.messages, {
+    super.activeModel,
+    super.isListening,
+    super.inputText,
+    super.conversationId,
+    super.conversations,
+  });
 }
 
 class ChatError extends ChatState {
   final String error;
-  const ChatError(super.messages, this.error);
+  const ChatError(
+    super.messages,
+    this.error, {
+    super.activeModel,
+    super.isListening,
+    super.inputText,
+    super.conversationId,
+    super.conversations,
+  });
 
   @override
-  List<Object> get props => [messages, error];
+  List<Object?> get props => [
+        messages,
+        activeModel,
+        isListening,
+        inputText,
+        conversationId,
+        conversations,
+        error,
+      ];
+}
+
+// BLoC Database events
+class LoadConversations extends ChatEvent {
+  const LoadConversations();
+}
+
+class SelectConversation extends ChatEvent {
+  final String conversationId;
+  const SelectConversation(this.conversationId);
+
+  @override
+  List<Object?> get props => [conversationId];
+}
+
+class CreateNewConversation extends ChatEvent {
+  const CreateNewConversation();
+}
+
+class DeleteConversation extends ChatEvent {
+  final String conversationId;
+  const DeleteConversation(this.conversationId);
+
+  @override
+  List<Object?> get props => [conversationId];
 }

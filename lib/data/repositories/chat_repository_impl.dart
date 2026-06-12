@@ -6,10 +6,13 @@ import '../../domain/repositories/chat_repository.dart';
 class ChatRepositoryImpl implements ChatRepository {
   // For Android Emulator use 10.0.2.2, for Windows/Web use 127.0.0.1
   // For physical Android device debugging, use your host machine's IP address
-  final String baseUrl = "http://192.168.1.125:8000";
+  final String baseUrl = "https://llm-backend-08lr.onrender.com";
 
   @override
-  Stream<String> getChatStream(List<ChatMessage> messages) async* {
+  Stream<String> getChatStream(
+    List<ChatMessage> messages, {
+    String? conversationId,
+  }) async* {
     final url = Uri.parse("$baseUrl/chat-stream");
 
     final request = http.Request("POST", url);
@@ -22,20 +25,22 @@ class ChatRepositoryImpl implements ChatRepository {
         .map((m) => {"role": m.role.name, "content": m.text})
         .toList();
 
-    request.body = jsonEncode({"messages": formattedMessages});
+    final Map<String, dynamic> bodyMap = {"messages": formattedMessages};
+    if (conversationId != null && conversationId.isNotEmpty) {
+      bodyMap["conversation_id"] = conversationId;
+    }
 
-    print("REPOSITORY: Sending request to $url");
+    request.body = jsonEncode(bodyMap);
+
     http.StreamedResponse response;
     try {
       response = await request.send().timeout(const Duration(seconds: 30));
     } catch (e) {
-      print("REPOSITORY ERROR: $e");
       throw Exception(
         "Connection failed. Ensure backend is running at $baseUrl. Error: $e",
       );
     }
 
-    print("REPOSITORY: Received response status: ${response.statusCode}");
 
     if (response.statusCode != 200) {
       throw Exception(
@@ -43,17 +48,79 @@ class ChatRepositoryImpl implements ChatRepository {
       );
     }
 
-    // Process the stream line by line
-    yield* response.stream
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .map((line) {
-          final trimmedLine = line.trim();
-          if (trimmedLine.startsWith("data: ")) {
-            return trimmedLine.substring(6);
+    // Process the stream event by event (\n\n delimited)
+    String buffer = "";
+    await for (final chunk in response.stream.transform(utf8.decoder)) {
+      buffer += chunk;
+      while (true) {
+        final index = buffer.indexOf("\n\n");
+        if (index == -1) break;
+
+        final event = buffer.substring(0, index);
+        buffer = buffer.substring(index + 2);
+
+        if (event.startsWith("data:")) {
+          String data;
+          if (event.startsWith("data: ")) {
+            data = event.substring(6);
+          } else {
+            data = event.substring(5);
           }
-          return "";
-        })
-        .where((text) => text.isNotEmpty);
+          yield data;
+        }
+      }
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getConversations() async {
+    final url = Uri.parse("$baseUrl/conversations");
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data["conversations"] ?? []);
+      }
+    } catch (e) {
+      //
+    }
+    return [];
+  }
+
+  @override
+  Future<Map<String, dynamic>> getConversation(String conversationId) async {
+    final url = Uri.parse("$baseUrl/conversations/$conversationId");
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception("Failed to load conversation: ${response.statusCode}");
+  }
+
+  @override
+  Future<Map<String, dynamic>> createConversation() async {
+    final url = Uri.parse("$baseUrl/conversations");
+    final response = await http.post(url).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception("Failed to create conversation: ${response.statusCode}");
+  }
+
+  @override
+  Future<bool> deleteConversation(String conversationId) async {
+    final url = Uri.parse("$baseUrl/conversations/$conversationId");
+    try {
+      final response = await http
+          .delete(url)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data["success"] == true;
+      }
+    } catch (e) {
+      //
+    }
+    return false;
   }
 }

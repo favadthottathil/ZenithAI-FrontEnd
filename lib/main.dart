@@ -17,11 +17,10 @@ class MyApp extends StatelessWidget {
     return RepositoryProvider(
       create: (context) => ChatRepositoryImpl(),
       child: BlocProvider(
-        create: (context) => ChatBloc(
-          repository: context.read<ChatRepositoryImpl>(),
-        ),
+        create: (context) =>
+            ChatBloc(repository: context.read<ChatRepositoryImpl>()),
         child: MaterialApp(
-          title: 'Modern AI Chat',
+          title: 'Zenith AI',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.darkTheme,
           home: const ChatScreen(),
