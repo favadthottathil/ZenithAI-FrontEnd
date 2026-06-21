@@ -1,3 +1,5 @@
+import 'attachment.dart';
+
 enum MessageRole { user, assistant }
 
 class ChatMessage {
@@ -7,6 +9,7 @@ class ChatMessage {
   final bool isLiked;
   final bool isDisliked;
   final bool isSpeaking;
+  final List<MessageAttachment> attachments;
 
   ChatMessage({
     required this.text,
@@ -15,6 +18,7 @@ class ChatMessage {
     this.isLiked = false,
     this.isDisliked = false,
     this.isSpeaking = false,
+    this.attachments = const [],
   });
 
   ChatMessage copyWith({
@@ -24,6 +28,7 @@ class ChatMessage {
     bool? isLiked,
     bool? isDisliked,
     bool? isSpeaking,
+    List<MessageAttachment>? attachments,
   }) {
     return ChatMessage(
       text: text ?? this.text,
@@ -32,6 +37,7 @@ class ChatMessage {
       isLiked: isLiked ?? this.isLiked,
       isDisliked: isDisliked ?? this.isDisliked,
       isSpeaking: isSpeaking ?? this.isSpeaking,
+      attachments: attachments ?? this.attachments,
     );
   }
 }

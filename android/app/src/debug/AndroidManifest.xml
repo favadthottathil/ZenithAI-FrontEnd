@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Cleartext (plain HTTP) traffic is permitted in DEBUG builds only, so a
+         local LAN backend (http://<host>:8000) can be used during development.
+         The main manifest disables cleartext, so release builds force HTTPS. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

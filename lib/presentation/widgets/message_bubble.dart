@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/security/safe_link.dart';
+import '../../domain/models/attachment.dart';
 import '../../domain/models/message.dart';
 import '../../theme/app_theme.dart';
 import '../bloc/chat_bloc.dart';
@@ -13,6 +15,7 @@ class MessageBubble extends StatefulWidget {
   final int messageIndex;
   final bool isLast;
   final bool isStreaming;
+  final String? errorMessage;
 
   const MessageBubble({
     super.key,
@@ -20,6 +23,7 @@ class MessageBubble extends StatefulWidget {
     required this.messageIndex,
     this.isLast = false,
     this.isStreaming = false,
+    this.errorMessage,
   });
 
   @override
@@ -38,9 +42,10 @@ class _MessageBubbleState extends State<MessageBubble>
       duration: const Duration(milliseconds: 500),
     );
     // Start cursor blink immediately for both thinking (empty) and streaming states
-    if (widget.isStreaming ||
-        (widget.message.role == MessageRole.assistant &&
-            widget.message.text.isEmpty)) {
+    if (widget.errorMessage == null &&
+        (widget.isStreaming ||
+            (widget.message.role == MessageRole.assistant &&
+                widget.message.text.isEmpty))) {
       _cursorController.repeat(reverse: true);
     }
   }
@@ -49,9 +54,10 @@ class _MessageBubbleState extends State<MessageBubble>
   void didUpdateWidget(MessageBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     final shouldAnimate =
-        widget.isStreaming ||
-        (widget.message.role == MessageRole.assistant &&
-            widget.message.text.isEmpty);
+        widget.errorMessage == null &&
+        (widget.isStreaming ||
+            (widget.message.role == MessageRole.assistant &&
+                widget.message.text.isEmpty));
     if (shouldAnimate && !_cursorController.isAnimating) {
       _cursorController.repeat(reverse: true);
     } else if (!shouldAnimate && _cursorController.isAnimating) {
@@ -66,62 +72,32 @@ class _MessageBubbleState extends State<MessageBubble>
     super.dispose();
   }
 
+  // The model sometimes emits a list marker ("1.", "*", "-") on its own
+  // line, with the item's content on the following line(s). CommonMark
+  // treats that as an empty list item followed by a separate paragraph,
+  // so the number/bullet and its title render as disconnected blocks.
+  // Merge a lone marker line with the next non-empty line so it parses
+  // as a single list item.
   String _formatText(String text) {
-    return text
-        .split('\n')
-        .map((line) {
-          final trimmed = line.trim();
-
-          // Match lines starting with a single asterisk and space like "* Heading"
-          final regExpBulletHeader = RegExp(r'^\*\s+(.*)$');
-          if (regExpBulletHeader.hasMatch(trimmed)) {
-            return trimmed.replaceAllMapped(regExpBulletHeader, (match) {
-              final content = match.group(1)?.trim() ?? '';
-              var cleanContent = content;
-              if (cleanContent.startsWith('**') &&
-                  cleanContent.endsWith('**')) {
-                cleanContent = cleanContent
-                    .substring(2, cleanContent.length - 2)
-                    .trim();
-              }
-              return '\n\n### $cleanContent\n\n';
-            });
-          }
-
-          // Match bold titles like "**Introduction**" or "**1. Step:**" at the start of a line
-          final regExpDouble = RegExp(r'^\*\*([^* \t][^*]*)\*\*([:.]?)(.*)$');
-          if (regExpDouble.hasMatch(trimmed)) {
-            return trimmed.replaceAllMapped(regExpDouble, (match) {
-              final content = match.group(1)?.trim() ?? '';
-              final punctuation = match.group(2) ?? '';
-              final rest = match.group(3)?.trim() ?? '';
-
-              if (rest.isNotEmpty) {
-                return '\n\n### $content$punctuation\n\n$rest\n\n';
-              } else {
-                return '\n\n### $content$punctuation\n\n';
-              }
-            });
-          }
-
-          // Match titles like "*Introduction*" or "*1. Step:*" at the start of a line
-          final regExpSingle = RegExp(r'^\*([^* \t][^*]*)\*([:.]?)(.*)$');
-          if (regExpSingle.hasMatch(trimmed)) {
-            return trimmed.replaceAllMapped(regExpSingle, (match) {
-              final content = match.group(1)?.trim() ?? '';
-              final punctuation = match.group(2) ?? '';
-              final rest = match.group(3)?.trim() ?? '';
-
-              if (rest.isNotEmpty) {
-                return '\n\n### $content$punctuation\n\n$rest\n\n';
-              } else {
-                return '\n\n### $content$punctuation\n\n';
-              }
-            });
-          }
-          return line;
-        })
-        .join('\n');
+    final lines = text.split('\n');
+    final markerOnly = RegExp(r'^(\d+[.)]|[*+-])$');
+    final result = <String>[];
+    for (var i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (markerOnly.hasMatch(trimmed)) {
+        var j = i + 1;
+        while (j < lines.length && lines[j].trim().isEmpty) {
+          j++;
+        }
+        if (j < lines.length) {
+          result.add('$trimmed ${lines[j].trim()}');
+          i = j;
+          continue;
+        }
+      }
+      result.add(lines[i]);
+    }
+    return result.join('\n');
   }
 
   @override
@@ -150,30 +126,51 @@ class _MessageBubbleState extends State<MessageBubble>
             children: [
               if (!isUser) _buildAssistantAvatar(),
               if (!isUser) const SizedBox(width: 12),
-              Flexible(
-                child: Container(
-                  padding: isUser
-                      ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
-                      : const EdgeInsets.only(top: 4, bottom: 4, right: 16),
-                  decoration: BoxDecoration(
-                    color: isUser
-                        ? const Color(0xFF2F2F2F) // Soft ChatGPT charcoal pill
-                        : Colors
-                              .transparent, // Assistant content flows background-free
-                    borderRadius: isUser
-                        ? const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
-                            bottomLeft: Radius.circular(20),
-                            bottomRight: Radius.circular(4),
-                          )
-                        : null,
-                  ),
-                  child: (isThinking || isStreaming)
-                      // Thinking & streaming: blinking cursor with text flowing in
-                      ? _buildStreamingText(message.text)
-                      // After streaming complete: full rich Markdown formatting
-                      : _buildMarkdownContent(context, message.text),
+               Flexible(
+                child: Column(
+                  crossAxisAlignment: isUser
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    if (isUser && message.attachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildAttachments(message.attachments),
+                      ),
+                    if (message.text.isNotEmpty ||
+                        (!isUser && message.attachments.isNotEmpty) ||
+                        (isUser && message.attachments.isEmpty) ||
+                        (!isUser && isThinking))
+                      Container(
+                        padding: isUser
+                            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
+                            : const EdgeInsets.only(top: 4, bottom: 4, right: 16),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? const Color(0xFF2F2F2F) // Soft ChatGPT charcoal pill
+                              : Colors.transparent, // Assistant content flows background-free
+                          borderRadius: isUser
+                              ? const BorderRadius.only(
+                                  topLeft: Radius.circular(20),
+                                  topRight: Radius.circular(20),
+                                  bottomLeft: Radius.circular(20),
+                                  bottomRight: Radius.circular(4),
+                                )
+                              : null,
+                        ),
+                        child: (isThinking && widget.errorMessage != null)
+                            // The request failed before any text arrived
+                            ? _buildErrorText(widget.errorMessage!)
+                            : isThinking
+                            // Waiting on the API: animated "thinking" dots
+                            ? _buildThinkingIndicator()
+                            : isStreaming
+                            // Streaming: blinking cursor with text flowing in
+                            ? _buildStreamingText(message.text)
+                            // After streaming complete: full rich Markdown formatting
+                            : _buildMarkdownContent(context, message.text),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -213,15 +210,7 @@ class _MessageBubbleState extends State<MessageBubble>
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: message.text));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text("Copied response to clipboard"),
-                          backgroundColor: AppTheme.surfaceColor,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(milliseconds: 1500),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                        _actionSnackBar("Copied response to clipboard"),
                       );
                     },
                   ),
@@ -236,18 +225,10 @@ class _MessageBubbleState extends State<MessageBubble>
                         ToggleMessageSpeaking(messageIndex),
                       );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            !message.isSpeaking
-                                ? "Reading response aloud..."
-                                : "Speech stopped",
-                          ),
-                          backgroundColor: AppTheme.surfaceColor,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(milliseconds: 1500),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                        _actionSnackBar(
+                          !message.isSpeaking
+                              ? "Reading response aloud..."
+                              : "Speech stopped",
                         ),
                       );
                     },
@@ -258,16 +239,11 @@ class _MessageBubbleState extends State<MessageBubble>
                       icon: LucideIcons.refresh_cw,
                       active: false,
                       onTap: () {
+                        context.read<ChatBloc>().add(
+                          const RegenerateResponse(),
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text("Regenerating response..."),
-                            backgroundColor: AppTheme.surfaceColor,
-                            behavior: SnackBarBehavior.floating,
-                            duration: const Duration(milliseconds: 1500),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
+                          _actionSnackBar("Regenerating response..."),
                         );
                       },
                     ),
@@ -280,20 +256,191 @@ class _MessageBubbleState extends State<MessageBubble>
     );
   }
 
-  // Lightweight streaming text with smooth animated cursor — no markdown parsing overhead
+  // Renders image previews and document chips attached to a user message.
+  // Images are shown large (Gemini-style "card" above the prompt text):
+  // a single image fills the available bubble width, while multiple images
+  // share a 2-column grid of large tiles.
+  Widget _buildAttachments(List<MessageAttachment> attachments) {
+    final images = attachments
+        .where((a) => a.type == AttachmentType.image)
+        .toList();
+    final documents = attachments
+        .where((a) => a.type != AttachmentType.image)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (images.isNotEmpty)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth.isFinite
+                  ? constraints.maxWidth
+                  : 320.0;
+              final isSingle = images.length == 1;
+              final tileWidth = isSingle
+                  ? maxWidth.clamp(0, 320).toDouble()
+                  : ((maxWidth - 8) / 2).clamp(0, 200).toDouble();
+              final tileHeight = isSingle ? 240.0 : tileWidth;
+
+              return Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: images.map((attachment) {
+                  final index = attachments.indexOf(attachment);
+                  final heroTag =
+                      'lightbox_${widget.messageIndex}_${index}_${attachment.filename}';
+                  return GestureDetector(
+                    onTap: () => _openLightbox(attachment, heroTag),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Hero(
+                        tag: heroTag,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.memory(
+                            attachment.bytes,
+                            width: tileWidth,
+                            height: tileHeight,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        if (documents.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: images.isNotEmpty ? 8 : 0),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
+              children: documents.map((attachment) {
+                return Container(
+                  constraints: const BoxConstraints(maxWidth: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.file_text,
+                        color: AppTheme.primaryColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          attachment.filename,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Shown when the request failed before any response text arrived
+  Widget _buildErrorText(String error) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(LucideIcons.circle_alert, color: Colors.redAccent, size: 16),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            "Something went wrong: $error",
+            style: TextStyle(
+              color: Colors.redAccent.withValues(alpha: 0.9),
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Splits text on "**bold**" markers into plain/bold TextSpans. Any
+  // trailing unmatched "**" (mid-stream, before its closing pair has
+  // arrived yet) is left as plain text until it closes.
+  List<TextSpan> _parseBoldSpans(String text) {
+    final spans = <TextSpan>[];
+    final pattern = RegExp(r'\*\*(.+?)\*\*', dotAll: true);
+    int lastEnd = 0;
+    for (final match in pattern.allMatches(text)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      spans.add(
+        TextSpan(
+          text: match.group(1),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      );
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+    return spans;
+  }
+
+  // Shown while waiting for the first chunk of the API response: a
+  // blinking cursor bar, matching the cursor used once text starts streaming.
+  Widget _buildThinkingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: FadeTransition(
+        opacity: _cursorController,
+        child: Container(
+          width: 8,
+          height: 18,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Lightweight streaming text with smooth animated cursor — parses
+  // "**bold**" inline so bold formatting renders live while streaming,
+  // without the overhead of full markdown parsing.
   Widget _buildStreamingText(String text) {
     return Text.rich(
       TextSpan(
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.95),
+          fontSize: 15.5,
+          height: 1.6,
+          letterSpacing: 0.1,
+        ),
         children: [
-          TextSpan(
-            text: text,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.95),
-              fontSize: 15.5,
-              height: 1.6,
-              letterSpacing: 0.1,
-            ),
-          ),
+          ..._parseBoldSpans(text),
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: FadeTransition(
@@ -318,6 +465,8 @@ class _MessageBubbleState extends State<MessageBubble>
   Widget _buildMarkdownContent(BuildContext context, String text) {
     return MarkdownBody(
       data: _formatText(text),
+      onTapLink: (linkText, href, title) => SafeLink.open(context, href ?? ''),
+      listItemCrossAxisAlignment: MarkdownListItemCrossAxisAlignment.start,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         blockSpacing: 16.0,
         p: TextStyle(
@@ -370,8 +519,6 @@ class _MessageBubbleState extends State<MessageBubble>
     );
   }
 
-  // No longer used — thinking state now shows the same blinking cursor as streaming
-
   Widget _buildAssistantAvatar() {
     return Container(
       width: 32,
@@ -398,6 +545,23 @@ class _MessageBubbleState extends State<MessageBubble>
           size: 15,
         ),
       ),
+    );
+  }
+
+  // A short confirmation toast for message actions (copy/speak/regenerate).
+  // It floats with a bottom margin large enough to clear the chat input bar,
+  // so the grey snackbar never overlaps/hides the text field.
+  SnackBar _actionSnackBar(String message) {
+    return SnackBar(
+      content: Text(
+        message,
+        style: const TextStyle(color: Colors.white),
+      ),
+      backgroundColor: AppTheme.surfaceColor,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(milliseconds: 1500),
+      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 96),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
   }
 
@@ -430,65 +594,54 @@ class _MessageBubbleState extends State<MessageBubble>
       ),
     );
   }
-}
 
-// Custom breathing animation dot for the thinking indicator
-class AnimatedDot extends StatefulWidget {
-  final int index;
-  const AnimatedDot({super.key, required this.index});
-
-  @override
-  State<AnimatedDot> createState() => _AnimatedDotState();
-}
-
-class _AnimatedDotState extends State<AnimatedDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Interval(
-          widget.index * 0.2,
-          0.6 + (widget.index * 0.2),
-          curve: Curves.easeInOut,
-        ),
-      ),
-    );
-
-    _controller.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _animation,
-      child: ScaleTransition(
-        scale: _animation,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 2.5),
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: AppTheme.primaryColor,
-            shape: BoxShape.circle,
-          ),
-        ),
+  void _openLightbox(MessageAttachment attachment, String heroTag) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.black.withValues(alpha: 0.9),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(LucideIcons.x, color: Colors.white, size: 24),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(LucideIcons.download, color: Colors.white, size: 20),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("File: ${attachment.filename}"),
+                        duration: const Duration(seconds: 2),
+                        backgroundColor: AppTheme.surfaceColor,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                clipBehavior: Clip.none,
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Hero(
+                  tag: heroTag,
+                  child: Image.memory(
+                    attachment.bytes,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

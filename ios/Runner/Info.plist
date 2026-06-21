@@ -70,5 +70,7 @@
 	<string>This app needs access to speech recognition to convert your voice into text.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs access to the microphone to capture your voice for speech recognition.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library so you can attach images to a chat message.</string>
 </dict>
 </plist>

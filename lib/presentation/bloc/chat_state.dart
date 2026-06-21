@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/models/message.dart';
+import '../../domain/models/attachment.dart';
 
 abstract class ChatEvent extends Equatable {
   const ChatEvent();
@@ -69,6 +70,28 @@ class ToggleMessageSpeaking extends ChatEvent {
   List<Object?> get props => [index];
 }
 
+class AttachmentPicked extends ChatEvent {
+  final MessageAttachment attachment;
+  const AttachmentPicked(this.attachment);
+
+  @override
+  List<Object?> get props => [attachment];
+}
+
+class AttachmentRemoved extends ChatEvent {
+  final int index;
+  const AttachmentRemoved(this.index);
+
+  @override
+  List<Object?> get props => [index];
+}
+
+// Re-sends the most recent user prompt to the backend and streams a fresh
+// assistant response in place of the previous one.
+class RegenerateResponse extends ChatEvent {
+  const RegenerateResponse();
+}
+
 
 // Redesigned ChatState to hold all state variables
 abstract class ChatState extends Equatable {
@@ -78,6 +101,8 @@ abstract class ChatState extends Equatable {
   final String inputText;
   final String? conversationId;
   final List<Map<String, dynamic>> conversations;
+  final String? infoMessage;
+  final List<MessageAttachment> pendingAttachments;
 
   const ChatState(
     this.messages, {
@@ -86,6 +111,8 @@ abstract class ChatState extends Equatable {
     this.inputText = "",
     this.conversationId,
     this.conversations = const [],
+    this.infoMessage,
+    this.pendingAttachments = const [],
   });
 
   @override
@@ -96,6 +123,8 @@ abstract class ChatState extends Equatable {
         inputText,
         conversationId,
         conversations,
+        infoMessage,
+        pendingAttachments,
       ];
 }
 
@@ -106,6 +135,8 @@ class ChatInitial extends ChatState {
     super.inputText,
     super.conversationId,
     super.conversations,
+    super.infoMessage,
+    super.pendingAttachments,
   }) : super(const []);
 }
 
@@ -117,6 +148,8 @@ class ChatLoading extends ChatState {
     super.inputText,
     super.conversationId,
     super.conversations,
+    super.infoMessage,
+    super.pendingAttachments,
   });
 }
 
@@ -128,6 +161,8 @@ class ChatStreaming extends ChatState {
     super.inputText,
     super.conversationId,
     super.conversations,
+    super.infoMessage,
+    super.pendingAttachments,
   });
 }
 
@@ -139,6 +174,8 @@ class ChatSuccess extends ChatState {
     super.inputText,
     super.conversationId,
     super.conversations,
+    super.infoMessage,
+    super.pendingAttachments,
   });
 }
 
@@ -152,6 +189,8 @@ class ChatError extends ChatState {
     super.inputText,
     super.conversationId,
     super.conversations,
+    super.infoMessage,
+    super.pendingAttachments,
   });
 
   @override
@@ -162,6 +201,8 @@ class ChatError extends ChatState {
         inputText,
         conversationId,
         conversations,
+        infoMessage,
+        pendingAttachments,
         error,
       ];
 }

@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../bloc/chat_bloc.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/settings_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -63,6 +64,34 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: BlocConsumer<ChatBloc, ChatState>(
                     listener: (context, state) {
+                      if (state is ChatError) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.error),
+                            backgroundColor: Colors.redAccent.withValues(
+                              alpha: 0.9,
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      }
+                      if (state.infoMessage != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.infoMessage!),
+                            backgroundColor: Colors.redAccent.withValues(
+                              alpha: 0.9,
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        );
+                      }
                       if (state is ChatStreaming) {
                         final isJustStarted =
                             state.messages.isNotEmpty &&
@@ -89,13 +118,20 @@ class _ChatScreenState extends State<ChatScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         itemCount: state.messages.length,
                         itemBuilder: (context, index) {
+                          final isLastMessage =
+                              index == state.messages.length - 1;
                           return MessageBubble(
+                            key: ValueKey(
+                              '${state.messages[index].timestamp.microsecondsSinceEpoch}_$index',
+                            ),
                             messageIndex: index,
                             message: state.messages[index],
-                            isLast: index == state.messages.length - 1,
+                            isLast: isLastMessage,
                             isStreaming:
-                                state is ChatStreaming &&
-                                index == state.messages.length - 1,
+                                state is ChatStreaming && isLastMessage,
+                            errorMessage: state is ChatError && isLastMessage
+                                ? state.error
+                                : null,
                           );
                         },
                       );
@@ -144,16 +180,27 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             const SizedBox(width: 8),
-            const Text(
-              "Zenith AI",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-                letterSpacing: -0.2,
+            const Expanded(
+              child: Text(
+                "Zenith AI",
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
-            const Spacer(),
+            // Settings (privacy / screen security)
+            IconButton(
+              icon: Icon(
+                LucideIcons.settings,
+                size: 20,
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
+              onPressed: () => SettingsSheet.show(context),
+            ),
             // New chat compose icon (ChatGPT style)
             IconButton(
               icon: Icon(
@@ -192,121 +239,136 @@ class _ChatScreenState extends State<ChatScreen> {
       child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Zenith AI Logo Image Loader
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Zenith AI Logo Image Loader
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
                       color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                      blurRadius: 24,
-                      spreadRadius: 1,
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(36),
-                  child: Image.asset(
-                    'assets/images/zenith_logo.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Center(
-                        child: Icon(
-                          LucideIcons.sparkles,
-                          color: AppTheme.primaryColor,
-                          size: 24,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                "How can I help you today?",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 48),
-              // Grid suggestion cards
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.5,
-                ),
-                itemCount: suggestions.length,
-                itemBuilder: (context, index) {
-                  final s = suggestions[index];
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    color: const Color(0xFF212121),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.03),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                        blurRadius: 24,
+                        spreadRadius: 1,
                       ),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        final promptText = "${s['title']} ${s['subtitle']}";
-                        context.read<ChatBloc>().add(
-                          ChatMessageSent(promptText),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(36),
+                    child: Image.asset(
+                      'assets/images/zenith_logo.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(
+                            LucideIcons.sparkles,
+                            color: AppTheme.primaryColor,
+                            size: 24,
+                          ),
                         );
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              s['title']!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Expanded(
-                              child: Text(
-                                s['subtitle']!,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.4),
-                                  fontSize: 12,
-                                  height: 1.3,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 2,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
-                  );
-                },
-              ),
-            ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  "How can I help you today?",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+                // Grid suggestion cards
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Narrow (mobile) screens need taller cards so the title
+                    // and subtitle text don't overflow the fixed-ratio cell.
+                    final childAspectRatio = constraints.maxWidth < 500
+                        ? 0.85
+                        : 1.5;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: childAspectRatio,
+                      ),
+                      itemCount: suggestions.length,
+                      itemBuilder: (context, index) {
+                        final s = suggestions[index];
+                        return Card(
+                          margin: EdgeInsets.zero,
+                          color: const Color(0xFF212121),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.03),
+                            ),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () {
+                              final promptText =
+                                  "${s['title']} ${s['subtitle']}";
+                              context.read<ChatBloc>().add(
+                                ChatMessageSent(promptText),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    s['title']!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Expanded(
+                                    child: Text(
+                                      s['subtitle']!,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.4,
+                                        ),
+                                        fontSize: 12,
+                                        height: 1.3,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
