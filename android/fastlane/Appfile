@@ -1,0 +1,2 @@
+package_name("com.example.llm_chat_app") # TODO: replace with your real Play Store application ID
+json_key_file(ENV["PLAY_STORE_JSON_KEY_PATH"])

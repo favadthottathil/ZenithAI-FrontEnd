@@ -38,3 +38,19 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: android
+
+      - name: Decode Play Store service account key
+        run: |
+          echo "${{ secrets.PLAY_STORE_JSON_KEY }}" | base64 --decode > android/play-store-key.json
+
+      - name: Upload to Play Store internal track
+        working-directory: android
+        env:
+          PLAY_STORE_JSON_KEY_PATH: play-store-key.json
+        run: bundle exec fastlane internal
+
