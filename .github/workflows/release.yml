@@ -27,6 +27,14 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=release-key.jks" >> android/key.properties
+
+      - name: Set version from tag
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD_NUMBER=${{ github.run_number }}
+          sed -i "s/^version: .*/version: $TAG_VERSION+$BUILD_NUMBER/" pubspec.yaml
+          cat pubspec.yaml | grep version
+          
           
       - run: flutter pub get
 
